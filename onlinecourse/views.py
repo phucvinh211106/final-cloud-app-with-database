@@ -1,12 +1,14 @@
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
 # <HINT> Import any new Models here
-from .models import Course, Enrollment
+from .models import Course, Enrollment, Question, Choice, Submission
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from django.views import generic
 from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 import logging
 # Get an instance of a logger
 logger = logging.getLogger(__name__)
@@ -132,5 +134,112 @@ def enroll(request, course_id):
         # Calculate the total score
 #def show_exam_result(request, course_id, submission_id):
 
+
+@login_required
+@require_POST
+def submit(request, course_id):
+    """Save the learner's exam submission."""
+    course = get_object_or_404(Course, pk=course_id)
+
+    enrollment = get_object_or_404(
+        Enrollment,
+        user=request.user,
+        course=course
+    )
+
+    submission = Submission.objects.create(
+        enrollment=enrollment
+    )
+
+    selected_choice_ids = []
+
+    for key, value in request.POST.items():
+        if key.startswith("choice_"):
+            try:
+                selected_choice_ids.append(int(value))
+            except ValueError:
+                continue
+
+    valid_choices = Choice.objects.filter(
+        id__in=selected_choice_ids,
+        question__lesson__course=course
+    )
+
+    submission.choices.add(*valid_choices)
+
+    return redirect(
+        "onlinecourse:show_exam_result",
+        course_id=course.id,
+        submission_id=submission.id
+    )
+
+
+@login_required
+def show_exam_result(request, course_id, submission_id):
+    """Calculate and display the learner's exam result."""
+    course = get_object_or_404(Course, pk=course_id)
+
+    submission = get_object_or_404(
+        Submission,
+        pk=submission_id,
+        enrollment__user=request.user,
+        enrollment__course=course
+    )
+
+    selected_choices = submission.choices.all()
+    selected_ids = set(
+        selected_choices.values_list("id", flat=True)
+    )
+
+    questions = Question.objects.filter(
+        lesson__course=course
+    ).prefetch_related("choice_set")
+
+    total_score = 0
+    possible_score = 0
+
+    for question in questions:
+        possible_score += question.grade
+
+        correct_ids = set(
+            question.choice_set.filter(
+                is_correct=True
+            ).values_list("id", flat=True)
+        )
+
+        question_selected_ids = set(
+            question.choice_set.filter(
+                id__in=selected_ids
+            ).values_list("id", flat=True)
+        )
+
+        question.is_correct = (
+            correct_ids == question_selected_ids
+        )
+
+        if question.is_correct:
+            total_score += question.grade
+
+    percentage = (
+        total_score / possible_score * 100
+        if possible_score > 0 else 0
+    )
+
+    context = {
+        "course": course,
+        "submission": submission,
+        "questions": questions,
+        "score": percentage,
+        "total_score": total_score,
+        "possible_score": possible_score,
+        "passed": percentage >= 80,
+        "selected_choices": selected_choices,
+    }
+
+    return render(
+        request,
+        "onlinecourse/exam_result_bootstrap.html",
+        context
+    )
 
 
