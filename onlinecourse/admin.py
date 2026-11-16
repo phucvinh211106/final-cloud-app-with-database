@@ -1,7 +1,8 @@
 
-"""Admin configuration for the OnlineCourse application."""
+"""Django admin configuration for OnlineCourse."""
 
 from django.contrib import admin
+
 from .models import (
     Course,
     Lesson,
@@ -14,29 +15,34 @@ from .models import (
 
 
 class ChoiceInline(admin.StackedInline):
-    """Display choices inside a question."""
+    """Allow choices to be edited inside a question."""
     model = Choice
     extra = 4
 
 
 class QuestionInline(admin.StackedInline):
-    """Display questions inside a lesson."""
+    """Allow questions to be edited inside a course."""
     model = Question
     extra = 1
 
 
 class QuestionAdmin(admin.ModelAdmin):
-    """Configure the question admin interface."""
+    """Configure the Question administration page."""
     inlines = [ChoiceInline]
-    list_display = ("question_text", "lesson", "grade")
+    list_display = ("question_text", "course", "grade")
 
 
 class LessonAdmin(admin.ModelAdmin):
-    """Configure the lesson admin interface."""
+    """Configure the Lesson administration page."""
+    list_display = ("title", "course")
+
+
+class CourseAdmin(admin.ModelAdmin):
+    """Configure the Course administration page."""
     inlines = [QuestionInline]
 
 
-admin.site.register(Course)
+admin.site.register(Course, CourseAdmin)
 admin.site.register(Instructor)
 admin.site.register(Learner)
 admin.site.register(Enrollment)
